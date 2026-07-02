@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Backrooms loop Multiplayer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        /* Главное меню */
+        #menu-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #0a0a05;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            text-align: center;
+            padding: 20px;
+        }
+
+        #menu-screen h1 {
+            font-size: 32px;
+            margin-bottom: 25px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: #ddc05b;
+            text-shadow: 3px 3px 0px #000;
+        }
+
+        .btn {
+            background: #ddc05b;
+            color: #000;
+            border: none;
+            padding: 15px 35px;
+            font-size: 16px;
+            font-weight: bold;
+            text-transform: uppercase;
+            cursor: pointer;
+            border-radius: 4px;
+            box-shadow: 0 4px 10px rgba(221, 192, 91, 0.3);
+            margin: 10px;
+            width: 280px;
+            transition: background 0.2s;
+        }
+
+        .btn:active {
+            background: #bfa343;
+        }
+
+        .btn:disabled {
+            background: #555 !important;
+            color: #aaa !important;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* Экран WebRTC */
+        #webrtc-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #111;
+            color: #fff;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9998;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .webrtc-box {
+            background: #222;
+            padding: 15px;
+            border: 2px solid #ddc05b;
+            border-radius: 6px;
+            width: 90%;
+            max-width: 500px;
+            margin-bottom: 15px;
+            text-align: center;
+            position: relative;
+        }
+
+        textarea {
+            width: 100%;
+            height: 90px;
+            background: #000;
+            color: #0f0;
+            border: 1px solid #555;
+            padding: 8px;
+            font-size: 11px;
+            resize: none;
+            margin: 8px 0;
+            font-family: monospace;
+        }
+
+        /* Кнопка Копирования */
+        .copy-btn {
+            background: #00bcd4;
+            color: #fff;
+            border: none;
+            padding: 10px;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 3px;
+            margin-top: 5px;
+            display: none;
+            text-transform: uppercase;
+            width: 100%;
+        }
+
+        /* Контейнер игры */
+        #game-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            display: none;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* Слой VHS */
+        #vhs-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 100;
+            box-shadow: inset 0 0 100px rgba(0,0,0,0.6);
+        }
+
+        #vhs-overlay::before {
+            content: " "; display: block; position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2; background-size: 100% 4px, 6px 100%;
+        }
+
+        .vhs-noise {
+            position: absolute; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.015); opacity: 0.8; z-index: 3; overflow: hidden;
+        }
+
+        .vhs-noise::after {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 5px;
+            background: rgba(255, 255, 255, 0.12); opacity: 0.4; animation: vhs-line 6s linear infinite;
+        }
+
+        @keyframes vhs-line { 0% { top: 0%; } 100% { top: 100%; } }
+
+        #vhs-hud {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            padding: 20px 30px; color: #e2e2e2; font-size: 18px;
+            text-shadow: 2px 2px 2px #000;
+            display: flex; flex-direction: column; justify-content: space-between;
+            z-index: 4; pointer-events: none; box-sizing: border-box;
+        }
+
+        .hud-top { display: flex; justify-content: space-between; }
+        .hud-bottom { display: flex; justify-content: space-between; width: 100%; }
+        .rec-container { display: flex; align-items: center; gap: 8px; color: #ff3333; font-weight: bold; }
+        .rec-dot { width: 12px; height: 12px; background-color: #ff3333; border-radius: 50%; animation: blink 1s steps(2, start) infinite; }
+        @keyframes blink { to { visibility: hidden; } }
+
+        /* Экран смерти */
+        #death-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 0, 0, 0.25); z-index: 95; pointer-events: none; display: none;
+            box-shadow: inset 0 0 150px rgba(150,0,0,0.8);
+        }
+
+        #blackout {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 200; display: none;
+        }
+
+        /* Стамина */
+        #stamina-bar-container {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            width: 160px; height: 10px; background: rgba(0,0,0,0.5); border: 1px solid #fff; z-index: 110;
+        }
+        #stamina-bar { width: 100%; height: 100%; background: #ddc05b; transition: width 0.1s; }
+
+        /* Инвентарь */
+        #inventory-hud {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 5px; z-index: 110; background: rgba(0,0,0,0.4); padding: 5px; border-radius: 5px;
+        }
+        .inv-slot {
+            width: 45px; height: 45px; border: 2px solid #555; background: rgba(0,0,0,0.6);
+            color: #fff; font-size: 8px; display: flex; justify-content: center; align-items: center;
+            text-align: center; border-radius: 4px; font-weight: bold;
+        }
+        .inv-slot.active { border-color: #ddc05b; background: rgba(221,192,91,0.2); }
+
+        /* Джойстик и кнопки */
+        #joystick-zone {
+            position: absolute; bottom: 25px; left: 40px; width: 100px; height: 100px;
+            background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.15); border-radius: 50%; z-index: 150; display: none; touch-action: none;
+        }
+        #joystick-handle {
+            position: absolute; top: 50%; left: 50%; width: 40px; height: 40px;
+            background: rgba(221,192,91,0.4); border: 2px solid rgba(221,192,91,0.8); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none;
+        }
+
+        #sprint-btn {
+            position: absolute; bottom: 40px; right: 40px; width: 65px; height: 65px;
+            background: rgba(255,255,255,0.1); border: 2px solid #fff; border-radius: 50%;
+            z-index: 150; display: none; color: #fff; font-weight: bold; font-size: 12px;
+            justify-content: center; align-items: center; touch-action: none;
+        }
+
+        #action-btn {
+            position: absolute; bottom: 120px; right: 40px; width: 65px; height: 65px;
+            background: rgba(221,192,91,0.2); border: 2px solid #ddc05b; border-radius: 50%;
+            z-index: 150; display: none; color: #ddc05b; font-weight: bold; font-size: 10px;
+            justify-content: center; align-items: center; text-align: center; line-height: 1.1; touch-action: none;
+        }
+
+        #touch-look-zone {
+            position: absolute; top: 0; right: 0; width: 60%; height: 100%; z-index: 90; display: none; touch-action: none;
+        }
+
+        #subtitles {
+            position: absolute; bottom: 22%; left: 50%; transform: translateX(-50%);
+            color: #fff; font-size: 16px; text-align: center; z-index: 110; text-shadow: 2px 2px 4px #000;
+            pointer-events: none; width: 80%; opacity: 0; transition: opacity 0.5s ease;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="menu-screen">
+        <h1>Backrooms loop</h1>
+        <button class="btn" id="single-btn">Одиночная игра</button>
+        <button class="btn" id="multi-btn">Мультиплеер подключение</button>
+    </div>
+
+    <div id="webrtc-screen">
+        <h2 style="color:#ddc05b; margin-bottom:15px;">WEBRTC СЕССИЯ</h2>
+        
+        <div class="webrtc-box">
+            <p style="margin-bottom: 10px;">1. Выберите вашу роль:</p>
+            <button class="btn" id="role-admin-btn" style="width:130px; padding:8px; margin:5px;">Админ</button>
+            <button class="btn" id="role-guest-btn" style="width:130px; padding:8px; margin:5px;">Гость</button>
+            <p id="current-role-txt" style="margin-top:5px; color:#ddc05b; font-weight:bold;">Роль не выбрана</p>
+        </div>
+
+        <div class="webrtc-box" id="action-box" style="display:none;">
+            <div id="admin-section" style="display:none;">
+                <p>2. Сгенерируйте код приглашения:</p>
+                <button class="btn" id="admin-gen-btn" style="width:240px; padding:8px;">Сгенерировать Offer</button>
+                <textarea id="admin-local-sdp" readonly placeholder="Тут появится ваш код..."></textarea>
+                <button class="copy-btn" id="admin-copy-btn">Скопировать код для Гостя</button>
+                
+                <hr style="border:0; border-top:1px dashed #555; margin:15px 0;">
+                
+                <p>3. Вставьте ответный код от Гостя:</p>
+                <textarea id="admin-remote-sdp" placeholder="Вставьте Ответ (Answer) сюда..."></textarea>
+                <button class="btn" id="admin-connect-btn" style="width:240px; padding:8px;">Применить код Гостя</button>
+            </div>
+
+            <div id="guest-section" style="display:none;">
+                <p>2. Вставьте код, полученный от Админа:</p>
+                <textarea id="guest-remote-sdp" placeholder="Вставьте Приглашение (Offer) сюда..."></textarea>
+                <button class="btn" id="guest-process-btn" style="width:240px; padding:8px;">Принять и создать ответ</button>
+                
+                <hr style="border:0; border-top:1px dashed #555; margin:15px 0;">
+                
+                <p>3. Скопируйте созданный ответ и отправьте Админу:</p>
+                <textarea id="guest-local-sdp" readonly placeholder="Тут появится ваш ответный код..."></textarea>
+                <button class="copy-btn" id="guest-copy-btn">Скопировать ответ для Админа</button>
+            </div>
+        </div>
+
+        <div class="webrtc-box">
+            <p>Статус сети: <span id="conn-status" style="color:#ff3333; font-weight:bold;">ОТКЛЮЧЕНО</span></p>
+            <p id="guest-wait-msg" style="display:none; color:#ddc05b; font-size:12px; margin-top:8px; font-style:italic;">Ожидание... Только Админ может запустить сессию.</p>
+            <button class="btn" id="start-session-btn" style="display:none; width:240px; background:#0f0; color:#000; margin-top:10px;">НАЧАТЬ СЕССИЮ</button>
+        </div>
+    </div>
+
+    <div id="game-container">
+        <div id="vhs-overlay">
+            <div class="vhs-noise"></div>
+            <div id="vhs-hud">
+                <div class="hud-top"><div>PLAY</div><div>SP</div></div>
+                <div class="hud-bottom">
+                    <div id="vhs-timestamp">00:00:00</div>
+                    <div class="rec-container"><div class="rec-dot"></div><div>REC</div></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="death-overlay"></div>
+        <div id="blackout"></div>
+        <div id="subtitles"></div>
+
+        <div id="stamina-bar-container"><div id="stamina-bar"></div></div>
+
+        <div id="inventory-hud">
+            <div class="inv-slot active" id="slot-0">-</div>
+            <div class="inv-slot" id="slot-1">-</div>
+            <div class="inv-slot" id="slot-2">-</div>
+        </div>
+
+        <div id="joystick-zone"><div id="joystick-handle"></div></div>
+        <div id="sprint-btn">RUN</div>
+        <div id="action-btn">ДЕЙСТВИЕ</div>
+        <div id="touch-look-zone"></div>
+    </div>
+
+    <script>
+        // --- ПЕРЕМЕННЫЕ И СОСТОЯНИЯ ---
+        let scene, camera, renderer, clock = new THREE.Clock();
+        
+        const STATE_INTRO = 0, STATE_FALLING = 1, STATE_WAKING = 2, STATE_GAMEPLAY = 3;
+        let currentState = STATE_INTRO;
+        let stateTimer = 0;
+        let isMultiplayer = false;
+        let myRole = ''; 
+
+        // Игрок и Стамина
+        let playerStamina = 100;
+        let isSprinting = false;
+        let isDead = false;
+        let carryingBodyId = null;   
+
+        // Инвентарь
+        let inventory = ["", "", ""];
+        let activeSlot = 0;
+
+        // Генерация лабиринта
+        let mazeGrid = {}; const CELL_SIZE = 14;
+        let lastCellX = NaN, lastCellZ = NaN, mazeGroup;
+        let textures = {};
+
+        // Сеть WebRTC
+        let peerConnection;
+        let dataChannel;
+        let remotePlayerMesh = null;
+        let remoteData = { x:0, y:1.65, z:5, rotY:0, isDead:false, carrying:null };
+
+        // Сущности: Монстр
+        let monsterMesh = null;
+        let monsterActive = false;
+        let monsterTimer = 0;
+        let monsterTarget = 'none'; 
+        let monsterSpeed = 4.0;
+
+        // Предметы на карте
+        let itemsInWorld = {}; 
+
+        // Управление
+        let joystickActive = false, joystickStart = { x:0, y:0 }, moveDirection = { forward:0, right:0 };
+        let lookTargetRotation = { x:0, y:0 }, currentLookRotation = { x:0, y:0 }, touchLookId = null, lastTouchLookPos = { x:0, y:0 };
+
+        // Звуки
+        let audioCtx, rainGainNode, humGainNode, monsterOsc;
+
+        // DOM элементы
+        const menuScreen = document.getElementById('menu-screen');
+        const webrtcScreen = document.getElementById('webrtc-screen');
+        const gameContainer = document.getElementById('game-container');
+        const blackout = document.getElementById('blackout');
+        const subtitles = document.getElementById('subtitles');
+        const joystickZone = document.getElementById('joystick-zone');
+        const joystickHandle = document.getElementById('joystick-handle');
+        const sprintBtn = document.getElementById('sprint-btn');
+        const actionBtn = document.getElementById('action-btn');
+        const touchLookZone = document.getElementById('touch-look-zone');
+        const staminaBar = document.getElementById('stamina-bar');
+        const deathOverlay = document.getElementById('death-overlay');
+        const timestampEl = document.getElementById('vhs-timestamp');
+
+        // Элементы нового интерфейса сессии
+        const actionBox = document.getElementById('action-box');
+        const adminSection = document.getElementById('admin-section');
+        const guestSection = document.getElementById('guest-section');
+        const connStatusText = document.getElementById('conn-status');
+        const guestWaitMsg = document.getElementById('guest-wait-msg');
+        const startSessionBtn = document.getElementById('start-session-btn');
+
+        // Таймер VHS кассеты
+        setInterval(() => {
+            let elapsed = Date.now();
+            let sec = Math.floor((elapsed / 1000) % 60), min = Math.floor((elapsed / (1000 * 60)) % 60), hr = Math.floor((elapsed / (1000 * 60 * 60)) % 24);
+            timestampEl.innerText = `${String(hr).padStart(2,'0')}:${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+        }, 100);
+
+        // --- ОБРАБОТКА ЭКРАННЫХ РЕЖИМОВ ---
+        function requestMobileFullscreen() {
+            let docElm = document.documentElement;
+            if (docElm.requestFullscreen) docElm.requestFullscreen();
+            else if (docElm.webkitRequestFullScreen) docElm.webkitRequestFullScreen();
+        }
+
+        document.getElementById('single-btn').addEventListener('click', () => {
+            isMultiplayer = false;
+            requestMobileFullscreen();
+            menuScreen.style.display = 'none';
+            gameContainer.style.display = 'block';
+            initAudioSystem();
+            init3D();
+            animate();
+        });
+
+        document.getElementById('multi-btn').addEventListener('click', () => {
+            isMultiplayer = true;
+            requestMobileFullscreen(); 
+            menuScreen.style.display = 'none';
+            webrtcScreen.style.display = 'flex';
+        });
+
+        // --- ВЕБ РТЦ ЛОГИКА ---
+        const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+        document.getElementById('role-admin-btn').addEventListener('click', () => {
+            myRole = 'admin';
+            document.getElementById('current-role-txt').innerText = "Ваша роль: АДМИН (Организатор)";
+            actionBox.style.display = 'block';
+            adminSection.style.display = 'block';
+            guestSection.style.display = 'none';
+            
+            document.getElementById('admin-local-sdp').value = "";
+            document.getElementById('admin-remote-sdp').value = "";
+            document.getElementById('admin-copy-btn').style.display = 'none';
+            startSessionBtn.style.display = 'none';
+            guestWaitMsg.style.display = 'none';
+            setupRTC();
+        });
+
+        document.getElementById('role-guest-btn').addEventListener('click', () => {
+            myRole = 'guest';
+            document.getElementById('current-role-txt').innerText = "Ваша роль: ГОСТЬ (Участник)";
+            actionBox.style.display = 'block';
+            adminSection.style.display = 'none';
+            guestSection.style.display = 'block';
+            
+            document.getElementById('guest-local-sdp').value = "";
+            document.getElementById('guest-remote-sdp').value = "";
+            document.getElementById('guest-copy-btn').style.display = 'none';
+            startSessionBtn.style.display = 'none';
+            guestWaitMsg.style.display = 'none';
+            setupRTC();
+        });
+
+        function setupRTC() {
+            if(peerConnection) {
+                peerConnection.close();
+            }
+            peerConnection = new RTCPeerConnection(configuration);
+
+            peerConnection.onicegatheringstatechange = () => {
+                if (peerConnection.iceGatheringState === 'complete') {
+                    if (myRole === 'admin') {
+                        document.getElementById('admin-local-sdp').value = JSON.stringify(peerConnection.localDescription);
+                        document.getElementById('admin-copy-btn').style.display = "block";
+                    } else {
+                        document.getElementById('guest-local-sdp').value = JSON.stringify(peerConnection.localDescription);
+                        document.getElementById('guest-copy-btn').style.display = "block";
+                    }
+                }
+            };
+
+            peerConnection.onicecandidate = (e) => {
+                if (e.candidate == null && peerConnection.localDescription) {
+                    if (myRole === 'admin') {
+                        document.getElementById('admin-local-sdp').value = JSON.stringify(peerConnection.localDescription);
+                        document.getElementById('admin-copy-btn').style.display = "block";
+                    } else {
+                        document.getElementById('guest-local-sdp').value = JSON.stringify(peerConnection.localDescription);
+                        document.getElementById('guest-copy-btn').style.display = "block";
+                    }
+                }
+            };
+
+            if (myRole === 'admin') {
+                dataChannel = peerConnection.createDataChannel("game-sync");
+                setupDataChannelCallbacks();
+            } else {
+                peerConnection.ondatachannel = (e) => {
+                    dataChannel = e.channel;
+                    setupDataChannelCallbacks();
+                };
+            }
+        }
+
+        document.getElementById('admin-gen-btn').addEventListener('click', async () => {
+            document.getElementById('admin-local-sdp').value = "Поиск сетевых маршрутов (ICE)... Ожидайте.";
+            document.getElementById('admin-copy-btn').style.display = "none";
+            try {
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+            } catch (err) {
+                alert("Не удалось запустить сбор сети. Попробуйте снова.");
+            }
+        });
+
+        document.getElementById('guest-process-btn').addEventListener('click', async () => {
+            let incomingOffer = document.getElementById('guest-remote-sdp').value.trim();
+            if(!incomingOffer) {
+                alert("Пожалуйста, вставьте код от Админа в текстовое поле!");
+                return;
+            }
+            document.getElementById('guest-local-sdp').value = "Генерация ответа сети... Ожидайте.";
+            document.getElementById('guest-copy-btn').style.display = "none";
+            
+            try {
+                const offerDesc = new RTCSessionDescription(JSON.parse(incomingOffer));
+                await peerConnection.setRemoteDescription(offerDesc);
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+            } catch(err) {
+                alert("Ошибка декодирования кода Админа! Проверьте, полностью ли скопирован текст.");
+                document.getElementById('guest-local-sdp').value = "";
+            }
+        });
+
+        document.getElementById('admin-copy-btn').addEventListener('click', () => {
+            const ta = document.getElementById('admin-local-sdp');
+            ta.select(); ta.setSelectionRange(0, 99999);
+            navigator.clipboard.writeText(ta.value);
+            alert("Код Админа скопирован! Передайте его Гостю.");
+        });
+
+        document.getElementById('guest-copy-btn').addEventListener('click', () => {
+            const ta = document.getElementById('guest-local-sdp');
+            ta.select(); ta.setSelectionRange(0, 99999);
+            navigator.clipboard.writeText(ta.value);
+            alert("Ответный код Гостя скопирован! Передайте его Админу.");
+        });
+
+        document.getElementById('admin-connect-btn').addEventListener('click', async () => {
+            let incomingAnswer = document.getElementById('admin-remote-sdp').value.trim();
+            if(!incomingAnswer) return;
+            try {
+                const answerDesc = new RTCSessionDescription(JSON.parse(incomingAnswer));
+                await peerConnection.setRemoteDescription(answerDesc);
+            } catch(e) { 
+                alert("Ошибка кода от Гостя. Убедитесь, что строка скопирована без потерь."); 
+            }
+        });
+
+        function setupDataChannelCallbacks() {
+            dataChannel.onopen = () => {
+                connStatusText.innerText = "ПОДКЛЮЧЕНО!";
+                connStatusText.style.color = "#0f0";
+                
+                if (myRole === 'admin') {
+                    startSessionBtn.style.display = 'block'; 
+                    guestWaitMsg.style.display = 'none';
+                } else {
+                    startSessionBtn.style.display = 'none';  
+                    guestWaitMsg.style.display = 'block'; 
+                }
+            };
+            dataChannel.onmessage = (e) => {
+                let msg = JSON.parse(e.data);
+                if (msg.type === 'start') {
+                    startMultiplayerGame();
+                } else if (msg.type === 'sync') {
+                    remoteData = msg.data;
+                } else if (msg.type === 'revive') {
+                    isDead = false;
+                    showSubtitle("Вас оживили!", 3000);
+                }
+            };
+        }
+
+        startSessionBtn.addEventListener('click', () => {
+            if (myRole === 'admin' && dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(JSON.stringify({ type: 'start' })); 
+                startMultiplayerGame();
+            }
+        });
+
+        function startMultiplayerGame() {
+            webrtcScreen.style.display = 'none';
+            gameContainer.style.display = 'block';
+            initAudioSystem();
+            init3D();
+            animate();
+        }
+
+        function sendNetworkSync() {
+            if (!isMultiplayer || !dataChannel || dataChannel.readyState !== 'open') return;
+            dataChannel.send(JSON.stringify({
+                type: 'sync',
+                data: {
+                    x: camera.position.x,
+                    y: camera.position.y,
+                    z: camera.position.z,
+                    rotY: currentLookRotation.y,
+                    isDead: isDead,
+                    carrying: carryingBodyId
+                }
+            }));
+        }
+
+        // --- ГЕНЕРАЦИЯ ТЕКСТУР И 3D ---
+        function createProceduralTextures() {
+            const createNoise = (color1, color2, density) => {
+                let canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128;
+                let ctx = canvas.getContext('2d'); ctx.fillStyle = color1; ctx.fillRect(0,0,128,128);
+                for(let i=0; i<density; i++) { ctx.fillStyle = Math.random() > 0.5 ? color2 : color1; ctx.fillRect(Math.random()*128, Math.random()*128, 2, 2); }
+                let tex = new THREE.CanvasTexture(canvas); tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping; return tex;
+            };
+            textures.asphalt = createNoise('#222', '#111', 1000);
+            textures.carpet = createNoise('#aba16e', '#9c9260', 2000);
+            textures.wallpaper = createNoise('#ccc07a', '#b0a560', 500);
+            textures.ceiling = createNoise('#dedcd1', '#b5b3aa', 400);
+        }
+
+        function init3D() {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x000000, 0.08);
+            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 100);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            gameContainer.appendChild(renderer.domElement);
+
+            createProceduralTextures();
+
+            mazeGroup = new THREE.Group();
+            scene.add(mazeGroup);
+
+            buildIntroStreet();
+            setupIntroState();
+            initMobileControls();
+            setupInventoryUI();
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        // --- ЗВУКОВОЙ ДВИЖОК ---
+        function initAudioSystem() {
+            try {
+                let AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+
+                let bufferSize = 2 * audioCtx.sampleRate, noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate), output = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) output[i] = Math.random() * 2 - 1;
+                let rainSource = audioCtx.createBufferSource(); rainSource.buffer = noiseBuffer; rainSource.loop = true;
+                let rainFilter = audioCtx.createBiquadFilter(); rainFilter.type = 'bandpass'; rainFilter.frequency.value = 1000;
+                rainGainNode = audioCtx.createGain(); rainGainNode.gain.setValueAtTime(0.25, audioCtx.currentTime);
+                rainSource.connect(rainFilter); rainFilter.connect(rainGainNode); rainGainNode.connect(audioCtx.destination);
+                rainSource.start();
+
+                let osc1 = audioCtx.createOscillator(), osc2 = audioCtx.createOscillator(), humFilter = audioCtx.createBiquadFilter();
+                humGainNode = audioCtx.createGain(); osc1.type = 'sawtooth'; osc1.frequency.setValueAtTime(55, audioCtx.currentTime);
+                osc2.type = 'sine'; osc2.frequency.setValueAtTime(110, audioCtx.currentTime);
+                humFilter.type = 'lowpass'; humFilter.frequency.setValueAtTime(220, audioCtx.currentTime);
+                humGainNode.gain.setValueAtTime(0.01, audioCtx.currentTime);
+                osc1.connect(humFilter); osc2.connect(humFilter); humFilter.connect(humGainNode); humGainNode.connect(audioCtx.destination);
+                osc1.start(); osc2.start();
+            } catch(e) { console.log(e); }
+        }
+
+        // --- МОДЕЛКА ИГРОКА ---
+        function createYellowHazmatCharacter() {
+            let group = new THREE.Group();
+            let mat = new THREE.MeshBasicMaterial({ color: 0xe0ca3c });
+            let glassMat = new THREE.MeshBasicMaterial({ color: 0x111115 }); 
+
+            let body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.9), mat); body.position.y = 0.75;
+            let head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 16), mat); head.position.y = 1.3;
+            
+            // ВАЖНО: Разворачиваем визор вперед по оси Z (0.18), чтобы лицо не косило назад
+            let visor = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.1), glassMat); visor.position.set(0, 1.32, 0.18);
+            
+            let legL = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.4), mat); legL.position.set(-0.15, 0.2, 0);
+            let legR = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.4), mat); legR.position.set(0.15, 0.2, 0);
+
+            group.add(body, head, visor, legL, legR);
+            return group;
+        }
+
+        // --- МОНСТР ---
+        function spawnMonster() {
+            if(monsterActive) return;
+            monsterActive = true;
+            monsterTimer = 25; 
+
+            if(!monsterMesh) {
+                monsterMesh = new THREE.Group();
+                let blackMat = new THREE.MeshBasicMaterial({ color: 0x0a0a0a });
+                let redMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                let torso = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.8, 0.4), blackMat); torso.position.y = 0.9;
+                let eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.05,8,8), redMat); eyeL.position.set(-0.1, 1.6, 0.21);
+                let eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.05,8,8), redMat); eyeR.position.set(0.1, 1.6, 0.21);
+                monsterMesh.add(torso, eyeL, eyeR);
+                scene.add(monsterMesh);
+            }
+
+            monsterMesh.position.set(camera.position.x + (Math.random() - 0.5) * 25, 0, camera.position.z + (Math.random() - 0.5) * 25);
+            monsterMesh.visible = true;
+
+            if(isMultiplayer && Math.random() > 0.5) {
+                monsterTarget = 'remote';
+            } else {
+                monsterTarget = 'me';
+                showSubtitle("ЧТО-ТО ИДЕТ СЮДА... ОНО БЛИЗКО!", 3000);
+            }
+
+            if(audioCtx) {
+                try { stopMonsterSound(); } catch(e){}
+                monsterOsc = audioCtx.createOscillator();
+                let monsterGain = audioCtx.createGain();
+                monsterOsc.type = 'sawtooth'; monsterOsc.frequency.setValueAtTime(90, audioCtx.currentTime);
+                monsterGain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                monsterOsc.connect(monsterGain); monsterGain.connect(audioCtx.destination);
+                monsterOsc.start();
+            }
+        }
+
+        function stopMonsterSound() {
+            if(monsterOsc) { try { monsterOsc.stop(); }catch(e){} monsterOsc = null; }
+        }
+
+        // --- УЛИЦА И НАЧАЛО ---
+        function buildIntroStreet() {
+            let ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 200), new THREE.MeshBasicMaterial({ color: 0x111111, map: textures.asphalt }));
+            ground.rotation.x = -Math.PI / 2; ground.position.z = -80;
+            let leftWall = new THREE.Mesh(new THREE.BoxGeometry(5, 40, 200), new THREE.MeshBasicMaterial({ color: 0x050505 })); leftWall.position.set(-15, 20, -80);
+            let rightWall = new THREE.Mesh(new THREE.BoxGeometry(5, 40, 200), new THREE.MeshBasicMaterial({ color: 0x050505 })); rightWall.position.set(15, 20, -80);
+            mazeGroup.add(ground, leftWall, rightWall);
+        }
+
+        function setupIntroState() {
+            currentState = STATE_INTRO; stateTimer = 0;
+            camera.position.set(0, 1.7, 0);
+            showSubtitle("Ох... Это была жёсткая пьянка... Пора возвращаться домой...", 6000);
+        }
+
+        function triggerFall() {
+            currentState = STATE_FALLING; stateTimer = 0;
+            blackout.style.display = 'block';
+            if(rainGainNode && audioCtx) rainGainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1.0);
+            showSubtitle("ЧТО ЗА... А-А-АХ!", 2000);
+        }
+
+        function triggerWakeUp() {
+            currentState = STATE_WAKING; stateTimer = 0; blackout.style.display = 'none';
+            scene.fog.color.setHex(0x302a11); scene.fog.density = 0.07;
+            
+            while(mazeGroup.children.length > 0) { mazeGroup.remove(mazeGroup.children[0]); }
+
+            if(isMultiplayer && remotePlayerMesh === null) {
+                remotePlayerMesh = createYellowHazmatCharacter();
+                scene.add(remotePlayerMesh);
+            }
+
+            camera.position.set(myRole === 'guest' ? 3 : 0, 0.2, 0);
+            camera.rotation.set(-Math.PI/3, 0, 0); currentLookRotation.x = -Math.PI/3;
+
+            updateInfiniteMaze(camera.position.x, camera.position.z);
+            if(humGainNode && audioCtx) humGainNode.gain.linearRampToValueAtTime(0.32, audioCtx.currentTime + 1.5);
+
+            showSubtitle("Где я? Тут пахнет старыми коврами...", 4000);
+        }
+
+        // --- БЕСКОНЕЧНЫЙ ЛАБИРИНТ ---
+        const ITEMS_POOL = ["Бандаж", "Фонарик", "Рация", "Записка", "Миндальная Вода", "Ключ"];
+
+        function updateInfiniteMaze(playerX, playerZ) {
+            let cx = Math.floor((playerX + CELL_SIZE/2) / CELL_SIZE);
+            let cz = Math.floor((playerZ + CELL_SIZE/2) / CELL_SIZE);
+            if (cx === lastCellX && cz === lastCellZ) return;
+            lastCellX = cx; lastCellZ = cz;
+
+            const r = 3;
+            for (let x = cx - r; x <= cx + r; x++) {
+                for (let z = cz - r; z <= cz + r; z++) {
+                    let key = `${x},${z}`;
+                    if (!mazeGrid[key]) {
+                        generateDynamicCell(x, z);
+                        mazeGrid[key] = true;
+                    }
+                }
+            }
+        }
+
+        function generateDynamicCell(cx, cz) {
+            let posX = cx * CELL_SIZE; let posZ = cz * CELL_SIZE;
+            let planeGeo = new THREE.PlaneGeometry(CELL_SIZE, CELL_SIZE);
+
+            let floor = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ map: textures.carpet }));
+            floor.rotation.x = -Math.PI/2; floor.position.set(posX, 0, posZ);
+            let ceil = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ map: textures.ceiling }));
+            ceil.rotation.x = Math.PI/2; ceil.position.set(posX, 3.2, posZ);
+            mazeGroup.add(floor, ceil);
+
+            let seed = Math.sin(cx * 12.98 + cz * 78.23) * 43758.54; let rand = seed - Math.floor(seed);
+            let wallMat = new THREE.MeshBasicMaterial({ map: textures.wallpaper });
+
+            if (rand < 0.2) {
+                for(let i = -3; i <= 3; i += 6) {
+                    for(let j = -3; j <= 3; j += 6) {
+                        let col = new THREE.Mesh(new THREE.BoxGeometry(1.5, 3.2, 1.5), wallMat);
+                        col.position.set(posX + i, 1.6, posZ + j); mazeGroup.add(col);
+                    }
+                }
+            } else if (rand < 0.4) {
+                let w = new THREE.Mesh(new THREE.BoxGeometry(CELL_SIZE, 3.2, 0.5), wallMat);
+                w.position.set(posX, 1.6, posZ); mazeGroup.add(w);
+            } else if (rand < 0.6) {
+                let r1 = new THREE.Mesh(new THREE.BoxGeometry(4, 3.2, 0.4), wallMat); r1.position.set(posX, 1.6, posZ - 2);
+                let r2 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.2, 4), wallMat); r2.position.set(posX - 2, 1.6, posZ);
+                mazeGroup.add(r1, r2);
+            } else {
+                let w = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.2, CELL_SIZE), wallMat);
+                w.position.set(posX - CELL_SIZE/2, 1.6, posZ); mazeGroup.add(w);
+            }
+
+            if(Math.random() > 0.65) {
+                let itemType = ITEMS_POOL[Math.floor(Math.random() * ITEMS_POOL.length)];
+                let itemGeo = new THREE.BoxGeometry(0.3, 0.15, 0.3);
+                let itemMat = new THREE.MeshBasicMaterial({ color: itemType === "Бандаж" ? 0xffffff : 0x0000ff });
+                let itemMesh = new THREE.Mesh(itemGeo, itemMat);
+                itemMesh.position.set(posX + (Math.random()-0.5)*5, 0.1, posZ + (Math.random()-0.5)*5);
+                itemMesh.userData = { name: itemType, key: `${cx},${cz}` };
+                mazeGroup.add(itemMesh);
+                itemsInWorld[`${cx},${cz}`] = itemMesh;
+            }
+        }
+
+        // --- ИНВЕНТАРЬ ---
+        function setupInventoryUI() {
+            for(let i=0; i<3; i++) {
+                document.getElementById(`slot-${i}`).addEventListener('click', () => {
+                    document.getElementById(`slot-${activeSlot}`).classList.remove('active');
+                    activeSlot = i;
+                    document.getElementById(`slot-${activeSlot}`).classList.add('active');
+                });
+            }
+        }
+
+        function updateInventoryHUD() {
+            for(let i=0; i<3; i++) {
+                document.getElementById(`slot-${i}`).innerText = inventory[i] === "" ? "-" : inventory[i];
+            }
+        }
+
+        // --- МОБИЛЬНЫЙ ТАЧ ---
+        function initMobileControls() {
+            joystickZone.addEventListener('touchstart', (e) => { joystickActive = true; joystickStart = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }, {passive:true});
+            window.addEventListener('touchmove', (e) => {
+                if (!joystickActive) return;
+                let t = [...e.touches].find(touch => touch.clientX < window.innerWidth / 2);
+                if(!t) return;
+                let distX = t.clientX - joystickStart.x, distY = t.clientY - joystickStart.y;
+                let angle = Math.atan2(distY, distX), currentDist = Math.min(Math.sqrt(distX*distX + distY*distY), 50);
+                joystickHandle.style.transform = `translate(calc(-50% + ${Math.cos(angle)*currentDist}px), calc(-50% + ${Math.sin(angle)*currentDist}px))`;
+                moveDirection.forward = -Math.sin(angle) * (currentDist/50); moveDirection.right = Math.cos(angle) * (currentDist/50);
+            }, {passive:true});
+
+            window.addEventListener('touchend', (e) => {
+                if(![...e.touches].some(touch => touch.clientX < window.innerWidth / 2)) {
+                    joystickActive = false; moveDirection.forward = 0; moveDirection.right = 0;
+                    joystickHandle.style.transform = 'translate(-50%, -50%)';
+                }
+            }, {passive:true});
+
+            sprintBtn.addEventListener('touchstart', () => { isSprinting = true; });
+            sprintBtn.addEventListener('touchend', () => { isSprinting = false; });
+
+            actionBtn.addEventListener('touchstart', () => {
+                let px = camera.position.x, pz = camera.position.z;
+                for(let key in itemsInWorld) {
+                    let it = itemsInWorld[key];
+                    if(it && camera.position.distanceTo(it.position) < 2.0) {
+                        for(let i=0; i<3; i++) {
+                            if(inventory[i] === "") {
+                                inventory[i] = it.userData.name;
+                                mazeGroup.remove(it); delete itemsInWorld[key];
+                                updateInventoryHUD(); showSubtitle(`Подобрано: ${inventory[i]}`, 2000);
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                if (isMultiplayer && remoteData.isDead && camera.position.distanceTo(remotePlayerMesh.position) < 2.5) {
+                    if (inventory[activeSlot] === "Бандаж") {
+                        inventory[activeSlot] = ""; updateInventoryHUD();
+                        if(dataChannel) dataChannel.send(JSON.stringify({ type: 'revive' }));
+                        showSubtitle("Вы воскресили напарника!", 3000);
+                        return;
+                    }
+                }
+
+                if(isMultiplayer && remoteData.isDead && !carryingBodyId) {
+                    if(camera.position.distanceTo(remotePlayerMesh.position) < 2.5) {
+                        carryingBodyId = 'remote'; showSubtitle("Вы тащите тело", 2000);
+                        return;
+                    }
+                } else if(carryingBodyId) {
+                    carryingBodyId = null; showSubtitle("Вы отпустили тело", 2000);
+                }
+            });
+
+            touchLookZone.addEventListener('touchstart', (e) => {
+                let t = [...e.touches].find(touch => touch.clientX > window.innerWidth / 2);
+                if(t) { touchLookId = t.identifier; lastTouchLookPos = { x: t.clientX, y: t.clientY }; }
+            }, {passive:true});
+
+            window.addEventListener('touchmove', (e) => {
+                if (touchLookId === null) return;
+                let t = [...e.touches].find(touch => touch.identifier === touchLookId);
+                if(!t) return;
+                lookTargetRotation.y -= (t.clientX - lastTouchLookPos.x) * 0.006;
+                lookTargetRotation.x -= (t.clientY - lastTouchLookPos.y) * 0.005;
+                lookTargetRotation.x = Math.max(-Math.PI/3, Math.min(Math.PI/3, lookTargetRotation.x));
+                lastTouchLookPos = { x: t.clientX, y: t.clientY };
+            }, {passive:true});
+
+            window.addEventListener('touchend', (e) => {
+                if(![...e.touches].some(t => t.identifier === touchLookId)) touchLookId = null;
+            }, {passive:true});
+        }
+
+        // --- ИГРОВОЙ ЦИКЛ ---
+        function animate() {
+            requestAnimationFrame(animate);
+            let delta = clock.getDelta(); if (delta > 0.1) delta = 0.1;
+            stateTimer += delta;
+
+            switch(currentState) {
+                case STATE_INTRO:
+                    camera.position.z -= 2.2 * delta;
+                    if (stateTimer >= 10.0) triggerFall();
+                    break;
+
+                case STATE_FALLING:
+                    if (stateTimer >= 3.0) triggerWakeUp();
+                    break;
+
+                case STATE_WAKING:
+                    let progress = Math.min(stateTimer / 4.0, 1);
+                    currentLookRotation.x = -Math.PI/3 + (Math.PI/3 * progress);
+                    camera.position.y = 0.2 + (1.45 * progress);
+                    camera.rotation.set(0,0,0); camera.rotateX(currentLookRotation.x);
+                    if (progress >= 1.0) {
+                        currentState = STATE_GAMEPLAY;
+                        joystickZone.style.display = 'block'; touchLookZone.style.display = 'block';
+                        sprintBtn.style.display = 'flex'; actionBtn.style.display = 'flex';
+                    }
+                    break;
+
+                case STATE_GAMEPLAY:
+                    if(isDead) {
+                        deathOverlay.style.display = 'block';
+                        camera.position.y = 0.2; 
+                    } else {
+                        deathOverlay.style.display = 'none';
+                    }
+
+                    let currentSpeed = 2.2;
+                    if (isSprinting && (moveDirection.forward !== 0 || moveDirection.right !== 0) && playerStamina > 0 && !isDead) {
+                        currentSpeed = 4.3; playerStamina -= 25 * delta;
+                    } else {
+                        playerStamina = Math.min(playerStamina + 12 * delta, 100);
+                    }
+                    staminaBar.style.width = `${playerStamina}%`;
+
+                    currentLookRotation.y += (lookTargetRotation.y - currentLookRotation.y) * 0.2;
+                    currentLookRotation.x += (lookTargetRotation.x - currentLookRotation.x) * 0.2;
+                    
+                    camera.rotation.set(0, 0, 0); 
+                    camera.rotateY(currentLookRotation.y); 
+                    camera.rotateX(currentLookRotation.x);
+
+                    // ИСПРАВЛЕНИЕ КАМЕРЫ НА ЗАТЫЛКЕ: берем направление взгляда из тригонометрии угла Y, игнорируя наклон X для вектора пола
+                    if ((moveDirection.forward !== 0 || moveDirection.right !== 0) && !isDead) {
+                        let cosY = Math.cos(currentLookRotation.y);
+                        let sinY = Math.sin(currentLookRotation.y);
+
+                        let forwardVec = new THREE.Vector3(-sinY, 0, -cosY).normalize();
+                        let rightVec = new THREE.Vector3(cosY, 0, -sinY).normalize();
+
+                        camera.position.addScaledVector(forwardVec, moveDirection.forward * currentSpeed * delta);
+                        camera.position.addScaledVector(rightVec, moveDirection.right * currentSpeed * delta);
+                        camera.position.y = 1.65 + Math.sin(stateTimer * (isSprinting ? 12 : 7.5)) * 0.04;
+                    } else if(!isDead) {
+                        camera.position.y = 1.65 + Math.sin(stateTimer * 1.8) * 0.008;
+                    }
+
+                    if(carryingBodyId === 'remote' && remotePlayerMesh) {
+                        let cosY = Math.cos(currentLookRotation.y);
+                        let sinY = Math.sin(currentLookRotation.y);
+                        remotePlayerMesh.position.set(camera.position.x - sinY * 1.5, 0.1, camera.position.z - cosY * 1.5);
+                    }
+
+                    if(isMultiplayer && remotePlayerMesh) {
+                        if(remoteData.carrying !== 'me') {
+                            remotePlayerMesh.position.lerp(new THREE.Vector3(remoteData.x, remoteData.isDead ? 0.1 : 0, remoteData.z), 0.2);
+                        } else {
+                            camera.position.x = remotePlayerMesh.position.x; camera.position.z = remotePlayerMesh.position.z;
+                        }
+                        remotePlayerMesh.rotation.y = remoteData.rotY;
+                        
+                        if(remoteData.isDead) { remotePlayerMesh.rotation.z = Math.PI/2; } else { remotePlayerMesh.rotation.z = 0; }
+                    }
+
+                    // Спавн монстра каждые 45 секунд
+                    if(!monsterActive && Math.floor(stateTimer) % 45 === 0 && Math.floor(stateTimer) > 1) {
+                        spawnMonster();
+                    }
+
+                    if(monsterActive && monsterMesh) {
+                        monsterTimer -= delta;
+                        let targetPos = new THREE.Vector3();
+                        
+                        if(monsterTarget === 'me') {
+                            targetPos.copy(camera.position);
+                        } else if(isMultiplayer && remotePlayerMesh) {
+                            targetPos.copy(remotePlayerMesh.position);
+                        }
+
+                        let dir = new THREE.Vector3().subVectors(targetPos, monsterMesh.position);
+                        dir.y = 0; dir.normalize();
+                        monsterMesh.position.addScaledVector(dir, monsterSpeed * delta);
+                        monsterMesh.lookAt(targetPos.x, monsterMesh.position.y, targetPos.z);
+
+                        // ИСПРАВЛЕНИЕ АТАКЫ МОНСТРА: Считаем плоское расстояние (только по X и Z), убирая погрешность высоты камеры Y
+                        let dx = camera.position.x - monsterMesh.position.x;
+                        let dz = camera.position.z - monsterMesh.position.z;
+                        let flatDistance = Math.sqrt(dx * dx + dz * dz);
+
+                        if(monsterTarget === 'me' && flatDistance < 1.3 && !isDead) {
+                            isDead = true; 
+                            stopMonsterSound();
+                            showSubtitle("ВЫ МЕРТВЫ. ВАС МОГУТ ВОСКРЕСИТЬ БАНДАЖОМ.", 5000);
+                        }
+
+                        if(monsterTimer <= 0) {
+                            monsterActive = false; 
+                            monsterMesh.visible = false; 
+                            stopMonsterSound();
+                        }
+                    }
+
+                    updateInfiniteMaze(camera.position.x, camera.position.z);
+                    sendNetworkSync();
+                    break;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function showSubtitle(text, duration) {
+            subtitles.innerText = text; subtitles.style.opacity = 1;
+            setTimeout(() => { if (subtitles.innerText === text) subtitles.style.opacity = 0; }, duration);
+        }
+    </script>
+</body>
+</html>

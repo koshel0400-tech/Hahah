@@ -190,13 +190,6 @@
         .rec-dot { width: 12px; height: 12px; background-color: #ff3333; border-radius: 50%; animation: blink 1s steps(2, start) infinite; }
         @keyframes blink { to { visibility: hidden; } }
 
-        /* Экран смерти */
-        #death-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(255, 0, 0, 0.25); z-index: 95; pointer-events: none; display: none;
-            box-shadow: inset 0 0 150px rgba(150,0,0,0.8);
-        }
-
         #blackout {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: #000; z-index: 200; display: none;
@@ -208,18 +201,6 @@
             width: 160px; height: 10px; background: rgba(0,0,0,0.5); border: 1px solid #fff; z-index: 110;
         }
         #stamina-bar { width: 100%; height: 100%; background: #ddc05b; transition: width 0.1s; }
-
-        /* Инвентарь */
-        #inventory-hud {
-            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 5px; z-index: 110; background: rgba(0,0,0,0.4); padding: 5px; border-radius: 5px;
-        }
-        .inv-slot {
-            width: 45px; height: 45px; border: 2px solid #555; background: rgba(0,0,0,0.6);
-            color: #fff; font-size: 8px; display: flex; justify-content: center; align-items: center;
-            text-align: center; border-radius: 4px; font-weight: bold;
-        }
-        .inv-slot.active { border-color: #ddc05b; background: rgba(221,192,91,0.2); }
 
         /* Джойстик и кнопки */
         #joystick-zone {
@@ -259,15 +240,18 @@
 </head>
 <body>
 
+    <!-- Главное меню -->
     <div id="menu-screen">
         <h1>Backrooms loop</h1>
         <button class="btn" id="single-btn">Одиночная игра</button>
         <button class="btn" id="multi-btn">Мультиплеер подключение</button>
     </div>
 
+    <!-- WebRTC Подключение -->
     <div id="webrtc-screen">
         <h2 style="color:#ddc05b; margin-bottom:15px;">WEBRTC СЕССИЯ</h2>
         
+        <!-- Шаг 1: Роль -->
         <div class="webrtc-box">
             <p style="margin-bottom: 10px;">1. Выберите вашу роль:</p>
             <button class="btn" id="role-admin-btn" style="width:130px; padding:8px; margin:5px;">Админ</button>
@@ -275,7 +259,9 @@
             <p id="current-role-txt" style="margin-top:5px; color:#ddc05b; font-weight:bold;">Роль не выбрана</p>
         </div>
 
+        <!-- Шаг 2: Взаимодействие -->
         <div class="webrtc-box" id="action-box" style="display:none;">
+            <!-- Секция Админа -->
             <div id="admin-section" style="display:none;">
                 <p>2. Сгенерируйте код приглашения:</p>
                 <button class="btn" id="admin-gen-btn" style="width:240px; padding:8px;">Сгенерировать Offer</button>
@@ -289,6 +275,7 @@
                 <button class="btn" id="admin-connect-btn" style="width:240px; padding:8px;">Применить код Гостя</button>
             </div>
 
+            <!-- Секция Гостя -->
             <div id="guest-section" style="display:none;">
                 <p>2. Вставьте код, полученный от Админа:</p>
                 <textarea id="guest-remote-sdp" placeholder="Вставьте Приглашение (Offer) сюда..."></textarea>
@@ -302,6 +289,7 @@
             </div>
         </div>
 
+        <!-- Статус подключения и кнопка старта -->
         <div class="webrtc-box">
             <p>Статус сети: <span id="conn-status" style="color:#ff3333; font-weight:bold;">ОТКЛЮЧЕНО</span></p>
             <p id="guest-wait-msg" style="display:none; color:#ddc05b; font-size:12px; margin-top:8px; font-style:italic;">Ожидание... Только Админ может запустить сессию.</p>
@@ -309,6 +297,7 @@
         </div>
     </div>
 
+    <!-- Основной игровой блок -->
     <div id="game-container">
         <div id="vhs-overlay">
             <div class="vhs-noise"></div>
@@ -321,17 +310,10 @@
             </div>
         </div>
 
-        <div id="death-overlay"></div>
         <div id="blackout"></div>
         <div id="subtitles"></div>
 
         <div id="stamina-bar-container"><div id="stamina-bar"></div></div>
-
-        <div id="inventory-hud">
-            <div class="inv-slot active" id="slot-0">-</div>
-            <div class="inv-slot" id="slot-1">-</div>
-            <div class="inv-slot" id="slot-2">-</div>
-        </div>
 
         <div id="joystick-zone"><div id="joystick-handle"></div></div>
         <div id="sprint-btn">RUN</div>
@@ -352,30 +334,21 @@
         // Игрок и Стамина
         let playerStamina = 100;
         let isSprinting = false;
-        let isDead = false;
-        let carryingBodyId = null;   
 
-        // Инвентарь
-        let inventory = ["", "", ""];
-        let activeSlot = 0;
-
-        // Генерация лабиринта
+        // Генерация лабиринта и структура коллизий
         let mazeGrid = {}; const CELL_SIZE = 14;
         let lastCellX = NaN, lastCellZ = NaN, mazeGroup;
         let textures = {};
+        
+        // Массивы для коллизий (стены и опасные дыры)
+        let collidableObjects = [];
+        let deathHoles = [];
 
         // Сеть WebRTC
         let peerConnection;
         let dataChannel;
         let remotePlayerMesh = null;
-        let remoteData = { x:0, y:1.65, z:5, rotY:0, isDead:false, carrying:null };
-
-        // Сущности: Монстр
-        let monsterMesh = null;
-        let monsterActive = false;
-        let monsterTimer = 0;
-        let monsterTarget = 'none'; 
-        let monsterSpeed = 4.0;
+        let remoteData = { x:0, y:1.65, z:5, rotY:0 };
 
         // Предметы на карте
         let itemsInWorld = {}; 
@@ -385,7 +358,7 @@
         let lookTargetRotation = { x:0, y:0 }, currentLookRotation = { x:0, y:0 }, touchLookId = null, lastTouchLookPos = { x:0, y:0 };
 
         // Звуки
-        let audioCtx, rainGainNode, humGainNode, monsterOsc;
+        let audioCtx, rainGainNode, humGainNode;
 
         // DOM элементы
         const menuScreen = document.getElementById('menu-screen');
@@ -399,7 +372,6 @@
         const actionBtn = document.getElementById('action-btn');
         const touchLookZone = document.getElementById('touch-look-zone');
         const staminaBar = document.getElementById('stamina-bar');
-        const deathOverlay = document.getElementById('death-overlay');
         const timestampEl = document.getElementById('vhs-timestamp');
 
         // Элементы нового интерфейса сессии
@@ -590,9 +562,6 @@
                     startMultiplayerGame();
                 } else if (msg.type === 'sync') {
                     remoteData = msg.data;
-                } else if (msg.type === 'revive') {
-                    isDead = false;
-                    showSubtitle("Вас оживили!", 3000);
                 }
             };
         }
@@ -620,9 +589,7 @@
                     x: camera.position.x,
                     y: camera.position.y,
                     z: camera.position.z,
-                    rotY: currentLookRotation.y,
-                    isDead: isDead,
-                    carrying: carryingBodyId
+                    rotY: currentLookRotation.y
                 }
             }));
         }
@@ -639,6 +606,7 @@
             textures.carpet = createNoise('#aba16e', '#9c9260', 2000);
             textures.wallpaper = createNoise('#ccc07a', '#b0a560', 500);
             textures.ceiling = createNoise('#dedcd1', '#b5b3aa', 400);
+            textures.abyss = createNoise('#050505', '#020202', 100);
         }
 
         function init3D() {
@@ -658,7 +626,6 @@
             buildIntroStreet();
             setupIntroState();
             initMobileControls();
-            setupInventoryUI();
 
             window.addEventListener('resize', () => {
                 camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
@@ -690,65 +657,23 @@
             } catch(e) { console.log(e); }
         }
 
-        // --- МОДЕЛКА ИГРОКА ---
+        // --- МОДЕЛКА ИГРОКА (НАПАРНИКА) ---
         function createYellowHazmatCharacter() {
             let group = new THREE.Group();
             let mat = new THREE.MeshBasicMaterial({ color: 0xe0ca3c });
-            let glassMat = new THREE.MeshBasicMaterial({ color: 0x111115 }); 
+            let glassMat = new THREE.MeshBasicMaterial({ color: 0x112244 }); 
 
             let body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.9), mat); body.position.y = 0.75;
             let head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 16), mat); head.position.y = 1.3;
             
-            // ВАЖНО: Разворачиваем визор вперед по оси Z (0.18), чтобы лицо не косило назад
-            let visor = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.1), glassMat); visor.position.set(0, 1.32, 0.18);
+            // ИСПРАВЛЕНИЕ: Раз камера на затылке, стекло (визор) крепится СЗАДИ по оси -Z
+            let visor = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.1), glassMat); visor.position.set(0, 1.32, -0.18);
             
             let legL = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.4), mat); legL.position.set(-0.15, 0.2, 0);
             let legR = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.4), mat); legR.position.set(0.15, 0.2, 0);
 
             group.add(body, head, visor, legL, legR);
             return group;
-        }
-
-        // --- МОНСТР ---
-        function spawnMonster() {
-            if(monsterActive) return;
-            monsterActive = true;
-            monsterTimer = 25; 
-
-            if(!monsterMesh) {
-                monsterMesh = new THREE.Group();
-                let blackMat = new THREE.MeshBasicMaterial({ color: 0x0a0a0a });
-                let redMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-                let torso = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.8, 0.4), blackMat); torso.position.y = 0.9;
-                let eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.05,8,8), redMat); eyeL.position.set(-0.1, 1.6, 0.21);
-                let eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.05,8,8), redMat); eyeR.position.set(0.1, 1.6, 0.21);
-                monsterMesh.add(torso, eyeL, eyeR);
-                scene.add(monsterMesh);
-            }
-
-            monsterMesh.position.set(camera.position.x + (Math.random() - 0.5) * 25, 0, camera.position.z + (Math.random() - 0.5) * 25);
-            monsterMesh.visible = true;
-
-            if(isMultiplayer && Math.random() > 0.5) {
-                monsterTarget = 'remote';
-            } else {
-                monsterTarget = 'me';
-                showSubtitle("ЧТО-ТО ИДЕТ СЮДА... ОНО БЛИЗКО!", 3000);
-            }
-
-            if(audioCtx) {
-                try { stopMonsterSound(); } catch(e){}
-                monsterOsc = audioCtx.createOscillator();
-                let monsterGain = audioCtx.createGain();
-                monsterOsc.type = 'sawtooth'; monsterOsc.frequency.setValueAtTime(90, audioCtx.currentTime);
-                monsterGain.gain.setValueAtTime(0.4, audioCtx.currentTime);
-                monsterOsc.connect(monsterGain); monsterGain.connect(audioCtx.destination);
-                monsterOsc.start();
-            }
-        }
-
-        function stopMonsterSound() {
-            if(monsterOsc) { try { monsterOsc.stop(); }catch(e){} monsterOsc = null; }
         }
 
         // --- УЛИЦА И НАЧАЛО ---
@@ -763,7 +688,7 @@
         function setupIntroState() {
             currentState = STATE_INTRO; stateTimer = 0;
             camera.position.set(0, 1.7, 0);
-            showSubtitle("Ох... Это была жёсткая пьянка... Пора возвращаться домой...", 6000);
+            showSubtitle("Ох... Пора возвращаться домой...", 6000);
         }
 
         function triggerFall() {
@@ -775,7 +700,7 @@
 
         function triggerWakeUp() {
             currentState = STATE_WAKING; stateTimer = 0; blackout.style.display = 'none';
-            scene.fog.color.setHex(0x302a11); scene.fog.density = 0.07;
+            scene.fog.color.setHex(0x1a1810); scene.fog.density = 0.07;
             
             while(mazeGroup.children.length > 0) { mazeGroup.remove(mazeGroup.children[0]); }
 
@@ -793,8 +718,8 @@
             showSubtitle("Где я? Тут пахнет старыми коврами...", 4000);
         }
 
-        // --- БЕСКОНЕЧНЫЙ ЛАБИРИНТ ---
-        const ITEMS_POOL = ["Бандаж", "Фонарик", "Рация", "Записка", "Миндальная Вода", "Ключ"];
+        // --- БЕСКОНЕЧНЫЙ ЛАБИРИНТ С КОЛЛИЗИЯМИ И ДЫРАМИ ---
+        const ITEMS_POOL = ["Фонарик", "Рация", "Записка", "Миндальная Вода", "Ключ"];
 
         function updateInfiniteMaze(playerX, playerZ) {
             let cx = Math.floor((playerX + CELL_SIZE/2) / CELL_SIZE);
@@ -818,38 +743,85 @@
             let posX = cx * CELL_SIZE; let posZ = cz * CELL_SIZE;
             let planeGeo = new THREE.PlaneGeometry(CELL_SIZE, CELL_SIZE);
 
+            let seed = Math.sin(cx * 12.98 + cz * 78.23) * 43758.54; let rand = seed - Math.floor(seed);
+            let wallMat = new THREE.MeshBasicMaterial({ map: textures.wallpaper });
+
+            // НОВАЯ КОМНАТА: Большое пространство с квадратными дырами
+            if (rand < 0.25 && (cx !== 0 || cz !== 0)) {
+                // Пол усеян бездной, кроме отдельных островков-плит
+                let darkFloor = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ map: textures.abyss }));
+                darkFloor.rotation.x = -Math.PI/2; darkFloor.position.set(posX, -2.0, posZ);
+                
+                let ceil = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ map: textures.ceiling }));
+                ceil.rotation.x = Math.PI/2; ceil.position.set(posX, 3.2, posZ);
+                mazeGroup.add(darkFloor, ceil);
+
+                // Создаем сетку островков 4x4. Там где островка нет - там квадратная дыра
+                for(let i = -2; i <= 2; i++) {
+                    for(let j = -2; j <= 2; j++) {
+                        let cellSeed = Math.sin((posX+i) * 4.12 + (posZ+j) * 9.63);
+                        let isHole = (cellSeed - Math.floor(cellSeed)) > 0.45;
+                        
+                        let pX = posX + (i * 2.5);
+                        let pZ = posZ + (j * 2.5);
+
+                        if (!isHole) {
+                            // Безопасная плитка
+                            let tile = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.1, 2.3), new THREE.MeshBasicMaterial({ color: 0x9c9260, map: textures.carpet }));
+                            tile.position.set(pX, 0, pZ);
+                            mazeGroup.add(tile);
+                        } else {
+                            // Квадратная опасная дыра
+                            deathHoles.push({ x: pX, z: pZ, radius: 1.2 });
+                        }
+                    }
+                }
+                return; 
+            }
+
+            // Стандартные комнаты Backrooms
             let floor = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ map: textures.carpet }));
             floor.rotation.x = -Math.PI/2; floor.position.set(posX, 0, posZ);
             let ceil = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ map: textures.ceiling }));
             ceil.rotation.x = Math.PI/2; ceil.position.set(posX, 3.2, posZ);
             mazeGroup.add(floor, ceil);
 
-            let seed = Math.sin(cx * 12.98 + cz * 78.23) * 43758.54; let rand = seed - Math.floor(seed);
-            let wallMat = new THREE.MeshBasicMaterial({ map: textures.wallpaper });
-
-            if (rand < 0.2) {
+            if (rand >= 0.25 && rand < 0.45) {
+                // Колонны по углам
                 for(let i = -3; i <= 3; i += 6) {
                     for(let j = -3; j <= 3; j += 6) {
-                        let col = new THREE.Mesh(new THREE.BoxGeometry(1.5, 3.2, 1.5), wallMat);
-                        col.position.set(posX + i, 1.6, posZ + j); mazeGroup.add(col);
+                        let col = new THREE.Mesh(new THREE.BoxGeometry(1.6, 3.2, 1.6), wallMat);
+                        col.position.set(posX + i, 1.6, posZ + j); 
+                        mazeGroup.add(col);
+                        collidableObjects.push({ x: posX + i, z: posZ + j, hx: 0.8, hz: 0.8 });
                     }
                 }
-            } else if (rand < 0.4) {
-                let w = new THREE.Mesh(new THREE.BoxGeometry(CELL_SIZE, 3.2, 0.5), wallMat);
-                w.position.set(posX, 1.6, posZ); mazeGroup.add(w);
-            } else if (rand < 0.6) {
-                let r1 = new THREE.Mesh(new THREE.BoxGeometry(4, 3.2, 0.4), wallMat); r1.position.set(posX, 1.6, posZ - 2);
-                let r2 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.2, 4), wallMat); r2.position.set(posX - 2, 1.6, posZ);
+            } else if (rand >= 0.45 && rand < 0.65) {
+                // Горизонтальная стена по центру
+                let w = new THREE.Mesh(new THREE.BoxGeometry(CELL_SIZE, 3.2, 0.6), wallMat);
+                w.position.set(posX, 1.6, posZ); 
+                mazeGroup.add(w);
+                collidableObjects.push({ x: posX, z: posZ, hx: CELL_SIZE / 2, hz: 0.3 });
+            } else if (rand >= 0.65 && rand < 0.85) {
+                // Угловая перегородка
+                let r1 = new THREE.Mesh(new THREE.BoxGeometry(4, 3.2, 0.6), wallMat); r1.position.set(posX, 1.6, posZ - 2);
+                let r2 = new THREE.Mesh(new THREE.BoxGeometry(0.6, 3.2, 4), wallMat); r2.position.set(posX - 2, 1.6, posZ);
                 mazeGroup.add(r1, r2);
+                collidableObjects.push({ x: posX, z: posZ - 2, hx: 2.0, hz: 0.3 });
+                collidableObjects.push({ x: posX - 2, z: posZ, hx: 0.3, hz: 2.0 });
             } else {
-                let w = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.2, CELL_SIZE), wallMat);
-                w.position.set(posX - CELL_SIZE/2, 1.6, posZ); mazeGroup.add(w);
+                // Боковая граница ячейки
+                let w = new THREE.Mesh(new THREE.BoxGeometry(0.6, 3.2, CELL_SIZE), wallMat);
+                w.position.set(posX - CELL_SIZE/2, 1.6, posZ); 
+                mazeGroup.add(w);
+                collidableObjects.push({ x: posX - CELL_SIZE/2, z: posZ, hx: 0.3, hz: CELL_SIZE / 2 });
             }
 
-            if(Math.random() > 0.65) {
+            // Лут
+            if(Math.random() > 0.75) {
                 let itemType = ITEMS_POOL[Math.floor(Math.random() * ITEMS_POOL.length)];
                 let itemGeo = new THREE.BoxGeometry(0.3, 0.15, 0.3);
-                let itemMat = new THREE.MeshBasicMaterial({ color: itemType === "Бандаж" ? 0xffffff : 0x0000ff });
+                let itemMat = new THREE.MeshBasicMaterial({ color: 0x0000ff });
                 let itemMesh = new THREE.Mesh(itemGeo, itemMat);
                 itemMesh.position.set(posX + (Math.random()-0.5)*5, 0.1, posZ + (Math.random()-0.5)*5);
                 itemMesh.userData = { name: itemType, key: `${cx},${cz}` };
@@ -858,24 +830,23 @@
             }
         }
 
-        // --- ИНВЕНТАРЬ ---
-        function setupInventoryUI() {
-            for(let i=0; i<3; i++) {
-                document.getElementById(`slot-${i}`).addEventListener('click', () => {
-                    document.getElementById(`slot-${activeSlot}`).classList.remove('active');
-                    activeSlot = i;
-                    document.getElementById(`slot-${activeSlot}`).classList.add('active');
-                });
+        // --- ФУНКЦИЯ ПРОВЕРКИ КОЛЛИЗИЙ СО СТЕНАМИ ---
+        function checkWallCollision(px, pz, radius) {
+            for(let i = 0; i < collidableObjects.length; i++) {
+                let obj = collidableObjects[i];
+                let minX = obj.x - obj.hx - radius;
+                let maxX = obj.x + obj.hx + radius;
+                let minZ = obj.z - obj.hz - radius;
+                let maxZ = obj.z + obj.hz + radius;
+
+                if (px > minX && px < maxX && pz > minZ && pz < maxZ) {
+                    return true; // Столкновение зафиксировано
+                }
             }
+            return false;
         }
 
-        function updateInventoryHUD() {
-            for(let i=0; i<3; i++) {
-                document.getElementById(`slot-${i}`).innerText = inventory[i] === "" ? "-" : inventory[i];
-            }
-        }
-
-        // --- МОБИЛЬНЫЙ ТАЧ ---
+        // --- МОБИЛЬНЫЙ ТАЧ С НАЖАТИЯМИ ---
         function initMobileControls() {
             joystickZone.addEventListener('touchstart', (e) => { joystickActive = true; joystickStart = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }, {passive:true});
             window.addEventListener('touchmove', (e) => {
@@ -899,37 +870,13 @@
             sprintBtn.addEventListener('touchend', () => { isSprinting = false; });
 
             actionBtn.addEventListener('touchstart', () => {
-                let px = camera.position.x, pz = camera.position.z;
                 for(let key in itemsInWorld) {
                     let it = itemsInWorld[key];
                     if(it && camera.position.distanceTo(it.position) < 2.0) {
-                        for(let i=0; i<3; i++) {
-                            if(inventory[i] === "") {
-                                inventory[i] = it.userData.name;
-                                mazeGroup.remove(it); delete itemsInWorld[key];
-                                updateInventoryHUD(); showSubtitle(`Подобрано: ${inventory[i]}`, 2000);
-                                return;
-                            }
-                        }
-                    }
-                }
-
-                if (isMultiplayer && remoteData.isDead && camera.position.distanceTo(remotePlayerMesh.position) < 2.5) {
-                    if (inventory[activeSlot] === "Бандаж") {
-                        inventory[activeSlot] = ""; updateInventoryHUD();
-                        if(dataChannel) dataChannel.send(JSON.stringify({ type: 'revive' }));
-                        showSubtitle("Вы воскресили напарника!", 3000);
+                        mazeGroup.remove(it); delete itemsInWorld[key];
+                        showSubtitle(`Подобрано: ${it.userData.name}`, 2000);
                         return;
                     }
-                }
-
-                if(isMultiplayer && remoteData.isDead && !carryingBodyId) {
-                    if(camera.position.distanceTo(remotePlayerMesh.position) < 2.5) {
-                        carryingBodyId = 'remote'; showSubtitle("Вы тащите тело", 2000);
-                        return;
-                    }
-                } else if(carryingBodyId) {
-                    carryingBodyId = null; showSubtitle("Вы отпустили тело", 2000);
                 }
             });
 
@@ -982,15 +929,8 @@
                     break;
 
                 case STATE_GAMEPLAY:
-                    if(isDead) {
-                        deathOverlay.style.display = 'block';
-                        camera.position.y = 0.2; 
-                    } else {
-                        deathOverlay.style.display = 'none';
-                    }
-
                     let currentSpeed = 2.2;
-                    if (isSprinting && (moveDirection.forward !== 0 || moveDirection.right !== 0) && playerStamina > 0 && !isDead) {
+                    if (isSprinting && (moveDirection.forward !== 0 || moveDirection.right !== 0) && playerStamina > 0) {
                         currentSpeed = 4.3; playerStamina -= 25 * delta;
                     } else {
                         playerStamina = Math.min(playerStamina + 12 * delta, 100);
@@ -1004,74 +944,51 @@
                     camera.rotateY(currentLookRotation.y); 
                     camera.rotateX(currentLookRotation.x);
 
-                    // ИСПРАВЛЕНИЕ КАМЕРЫ НА ЗАТЫЛКЕ: берем направление взгляда из тригонометрии угла Y, игнорируя наклон X для вектора пола
-                    if ((moveDirection.forward !== 0 || moveDirection.right !== 0) && !isDead) {
+                    if (moveDirection.forward !== 0 || moveDirection.right !== 0) {
                         let cosY = Math.cos(currentLookRotation.y);
                         let sinY = Math.sin(currentLookRotation.y);
 
                         let forwardVec = new THREE.Vector3(-sinY, 0, -cosY).normalize();
                         let rightVec = new THREE.Vector3(cosY, 0, -sinY).normalize();
 
-                        camera.position.addScaledVector(forwardVec, moveDirection.forward * currentSpeed * delta);
-                        camera.position.addScaledVector(rightVec, moveDirection.right * currentSpeed * delta);
+                        // Расчет смещения игрока
+                        let moveX = (forwardVec.x * moveDirection.forward + rightVec.x * moveDirection.right) * currentSpeed * delta;
+                        let moveZ = (forwardVec.z * moveDirection.forward + rightVec.z * moveDirection.right) * currentSpeed * delta;
+
+                        // СТРОГАЯ ПРОВЕРКА КОЛЛИЗИЙ (Поочередно по осям X и Z для плавного скольжения вдоль стен)
+                        let targetX = camera.position.x + moveX;
+                        let targetZ = camera.position.z + moveZ;
+                        
+                        if (!checkWallCollision(targetX, camera.position.z, 0.4)) {
+                            camera.position.x = targetX;
+                        }
+                        if (!checkWallCollision(camera.position.x, targetZ, 0.4)) {
+                            camera.position.z = targetZ;
+                        }
+
                         camera.position.y = 1.65 + Math.sin(stateTimer * (isSprinting ? 12 : 7.5)) * 0.04;
-                    } else if(!isDead) {
+                    } else {
                         camera.position.y = 1.65 + Math.sin(stateTimer * 1.8) * 0.008;
                     }
 
-                    if(carryingBodyId === 'remote' && remotePlayerMesh) {
-                        let cosY = Math.cos(currentLookRotation.y);
-                        let sinY = Math.sin(currentLookRotation.y);
-                        remotePlayerMesh.position.set(camera.position.x - sinY * 1.5, 0.1, camera.position.z - cosY * 1.5);
+                    // ПРОВЕРКА ПАДЕНИЯ В КВАДРАТНЫЕ ДЫРЫ
+                    for(let h = 0; h < deathHoles.length; h++) {
+                        let hole = deathHoles[h];
+                        let dx = camera.position.x - hole.x;
+                        let dz = camera.position.z - hole.z;
+                        if(Math.abs(dx) < hole.radius && Math.abs(dz) < hole.radius) {
+                            // Игрок упал в дыру! Тряска и телепортация на спавн
+                            showSubtitle("ВЫ ОСТУПИЛИСЬ И УПАЛИ В БЕЗДНУ!", 3000);
+                            camera.position.set(0, 1.65, 0);
+                            break;
+                        }
                     }
 
                     if(isMultiplayer && remotePlayerMesh) {
-                        if(remoteData.carrying !== 'me') {
-                            remotePlayerMesh.position.lerp(new THREE.Vector3(remoteData.x, remoteData.isDead ? 0.1 : 0, remoteData.z), 0.2);
-                        } else {
-                            camera.position.x = remotePlayerMesh.position.x; camera.position.z = remotePlayerMesh.position.z;
-                        }
-                        remotePlayerMesh.rotation.y = remoteData.rotY;
+                        remotePlayerMesh.position.lerp(new THREE.Vector3(remoteData.x, 0, remoteData.z), 0.2);
                         
-                        if(remoteData.isDead) { remotePlayerMesh.rotation.z = Math.PI/2; } else { remotePlayerMesh.rotation.z = 0; }
-                    }
-
-                    // Спавн монстра каждые 45 секунд
-                    if(!monsterActive && Math.floor(stateTimer) % 45 === 0 && Math.floor(stateTimer) > 1) {
-                        spawnMonster();
-                    }
-
-                    if(monsterActive && monsterMesh) {
-                        monsterTimer -= delta;
-                        let targetPos = new THREE.Vector3();
-                        
-                        if(monsterTarget === 'me') {
-                            targetPos.copy(camera.position);
-                        } else if(isMultiplayer && remotePlayerMesh) {
-                            targetPos.copy(remotePlayerMesh.position);
-                        }
-
-                        let dir = new THREE.Vector3().subVectors(targetPos, monsterMesh.position);
-                        dir.y = 0; dir.normalize();
-                        monsterMesh.position.addScaledVector(dir, monsterSpeed * delta);
-                        monsterMesh.lookAt(targetPos.x, monsterMesh.position.y, targetPos.z);
-
-                        // ИСПРАВЛЕНИЕ АТАКЫ МОНСТРА: Считаем плоское расстояние (только по X и Z), убирая погрешность высоты камеры Y
-                        let dx = camera.position.x - monsterMesh.position.x;
-                        let dz = camera.position.z - monsterMesh.position.z;
-                        let flatDistance = Math.sqrt(dx * dx + dz * dz);
-
-                        if(monsterTarget === 'me' && flatDistance < 1.3 && !isDead) {
-                            isDead = true; 
-                            stopMonsterSound();
-                            showSubtitle("ВЫ МЕРТВЫ. ВАС МОГУТ ВОСКРЕСИТЬ БАНДАЖОМ.", 5000);
-                        }
-
-                        if(monsterTimer <= 0) {
-                            monsterActive = false; 
-                            monsterMesh.visible = false; 
-                            stopMonsterSound();
-                        }
+                        // Синхронизация разворота лица напарника (с учётом стекла на затылке)
+                        remotePlayerMesh.rotation.y = remoteData.rotY + Math.PI;
                     }
 
                     updateInfiniteMaze(camera.position.x, camera.position.z);
